@@ -1,11 +1,9 @@
 package tikv
 
 import (
-	"fmt"
 	logger "github.com/ipfs/go-log"
 	"github.com/pingcap/tidb/config"
 	"github.com/pingcap/tidb/store/tikv"
-	"strings"
 	"sync"
 	"time"
 )
@@ -35,9 +33,6 @@ func NewDatastore(addr []string, options *Options) (*Datastore, error) {
 
 	kv, err := tikv.NewRawKVClient(addr, options.Security)
 	if err != nil {
-		if strings.HasPrefix(err.Error(), "manifest has unsupported version:") {
-			err = fmt.Errorf("unsupported badger version, use github.com/ipfs/badgerds-upgrade to upgrade: %s", err.Error())
-		}
 		return nil, err
 	}
 
