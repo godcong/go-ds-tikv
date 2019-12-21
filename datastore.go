@@ -1,6 +1,7 @@
 package tikv
 
 import (
+	ds "github.com/ipfs/go-datastore"
 	logger "github.com/ipfs/go-log"
 	"github.com/pingcap/tidb/config"
 	"github.com/pingcap/tidb/store/tikv"
@@ -27,10 +28,14 @@ type Options struct {
 	config.Security
 }
 
+var _ ds.Datastore = (*Datastore)(nil)
+var _ ds.TxnDatastore = (*Datastore)(nil)
+var _ ds.TTLDatastore = (*Datastore)(nil)
+var _ ds.GCDatastore = (*Datastore)(nil)
+
 var log = logger.Logger("tikv")
 
 func NewDatastore(addr []string, options *Options) (*Datastore, error) {
-
 	kv, err := tikv.NewRawKVClient(addr, options.Security)
 	if err != nil {
 		return nil, err
