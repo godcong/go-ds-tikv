@@ -52,7 +52,7 @@ var _ ds.GCDatastore = (*Datastore)(nil)
 var log = logger.Logger("tikv")
 
 func NewDatastore(addr []string, options *Options) (*Datastore, error) {
-	kv, err := txnkv.NewClient(context.TODO(), []string{"127.0.0.1:2379"}, options.Config)
+	kv, err := txnkv.NewClient(context.TODO(), addr, options.Config)
 	//kv, err := rawkv.NewClient(context.TODO(), []string{"127.0.0.1:2379"}, options.Config)
 	if err != nil {
 		return nil, err
