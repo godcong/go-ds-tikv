@@ -46,7 +46,8 @@ var ErrClosed = errors.New("datastore closed")
 
 var _ ds.Datastore = (*Datastore)(nil)
 var _ ds.TxnDatastore = (*Datastore)(nil)
-var _ ds.TTLDatastore = (*Datastore)(nil)
+
+//var _ ds.TTLDatastore = (*Datastore)(nil)
 var _ ds.GCDatastore = (*Datastore)(nil)
 
 var log = logger.Logger("tikv")
@@ -67,7 +68,20 @@ func NewDatastore(addr []string, options *Options) (*Datastore, error) {
 }
 
 func (d *Datastore) PutWithTTL(key ds.Key, value []byte, ttl time.Duration) error {
-	panic("ttl")
+	d.closeLk.RLock()
+	defer d.closeLk.RUnlock()
+	if d.closed {
+		return ErrClosed
+	}
+
+	txn := d.newImplicitTransaction(false)
+	defer txn.rollback()
+
+	if err := txn.putWithTTL(key, value, ttl); err != nil {
+		return err
+	}
+
+	return txn.commit()
 }
 
 func (d *Datastore) SetTTL(key ds.Key, ttl time.Duration) error {
@@ -106,7 +120,7 @@ func (d *Datastore) Put(key ds.Key, value []byte) error {
 	}
 
 	txn := d.newImplicitTransaction(false)
-	defer txn.discard()
+	defer txn.rollback()
 
 	if err := txn.put(key, value); err != nil {
 		return err
@@ -149,10 +163,13 @@ func (t *txn) commit() error {
 	return t.txn.Commit(context.Background())
 }
 
-func (t *txn) discard() {
+func (t *txn) rollback() {
 	e := t.txn.Rollback()
 	if e != nil {
 		log.Error("discard error:", e)
 	}
+}
 
+func (t *txn) putWithTTL(key ds.Key, bytes []byte, duration time.Duration) error {
+	panic("todo")
 }
