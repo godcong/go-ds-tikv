@@ -8,6 +8,7 @@ import (
 	logger "github.com/ipfs/go-log"
 	"github.com/tikv/client-go/config"
 	"github.com/tikv/client-go/txnkv"
+	"github.com/tikv/client-go/txnkv/kv"
 	"sync"
 	"time"
 )
@@ -35,6 +36,38 @@ type txn struct {
 	// Whether this transaction has been implicitly created as a result of a direct Datastore
 	// method invocation.
 	implicit bool
+}
+
+func (t *txn) Get(key ds.Key) (value []byte, err error) {
+	return t.get(key)
+}
+
+func (t *txn) Has(key ds.Key) (exists bool, err error) {
+	panic("implement me")
+}
+
+func (t *txn) GetSize(key ds.Key) (size int, err error) {
+	panic("implement me")
+}
+
+func (t *txn) Query(q query.Query) (query.Results, error) {
+	panic("implement me")
+}
+
+func (t *txn) Put(key ds.Key, value []byte) error {
+	panic("implement me")
+}
+
+func (t *txn) Delete(key ds.Key) error {
+	panic("implement me")
+}
+
+func (t *txn) Commit() error {
+	panic("implement me")
+}
+
+func (t *txn) Discard() {
+	panic("implement me")
 }
 
 // Options are the badger datastore options, reexported here for convenience.
@@ -68,12 +101,6 @@ func NewDatastore(addr []string, options *Options) (*Datastore, error) {
 }
 
 func (d *Datastore) PutWithTTL(key ds.Key, value []byte, ttl time.Duration) error {
-	d.closeLk.RLock()
-	defer d.closeLk.RUnlock()
-	if d.closed {
-		return ErrClosed
-	}
-
 	txn := d.newImplicitTransaction(false)
 	defer txn.rollback()
 
@@ -93,7 +120,11 @@ func (d *Datastore) GetExpiration(key ds.Key) (time.Time, error) {
 }
 
 func (d *Datastore) NewTransaction(readOnly bool) (ds.Txn, error) {
-	panic("txn")
+	transaction, e := d.cli.Begin(context.TODO())
+	if e != nil {
+		return nil, e
+	}
+	return &txn{ds: d, txn: transaction, implicit: false}, nil
 }
 
 func (d *Datastore) Get(key ds.Key) (value []byte, err error) {
@@ -109,16 +140,12 @@ func (d *Datastore) GetSize(key ds.Key) (size int, err error) {
 }
 
 func (d *Datastore) Query(q query.Query) (query.Results, error) {
-	panic("ds.Datastore")
+	txn := d.newImplicitTransaction(true)
+
+	return txn.query(q)
 }
 
 func (d *Datastore) Put(key ds.Key, value []byte) error {
-	d.closeLk.RLock()
-	defer d.closeLk.RUnlock()
-	if d.closed {
-		return ErrClosed
-	}
-
 	txn := d.newImplicitTransaction(false)
 	defer txn.rollback()
 
@@ -134,11 +161,11 @@ func (d *Datastore) Delete(key ds.Key) error {
 }
 
 func (d *Datastore) Sync(prefix ds.Key) error {
-	panic("ds.Datastore")
+	return nil
 }
 
 func (d *Datastore) Close() error {
-	panic("ds.Datastore")
+	return nil
 }
 
 func (d *Datastore) CollectGarbage() error {
@@ -172,4 +199,20 @@ func (t *txn) rollback() {
 
 func (t *txn) putWithTTL(key ds.Key, bytes []byte, duration time.Duration) error {
 	panic("todo")
+}
+
+func (t *txn) get(key ds.Key) ([]byte, error) {
+	item, err := t.txn.Get(context.TODO(), key.Bytes())
+	if err == kv.ErrNotExist {
+		err = ds.ErrNotFound
+	}
+	if err != nil {
+		return nil, err
+	}
+
+	return item, nil
+}
+
+func (t *txn) query(q query.Query) (query.Results, error) {
+	panic("TODO")
 }
