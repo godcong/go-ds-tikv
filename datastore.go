@@ -150,5 +150,9 @@ func (t *txn) commit() error {
 }
 
 func (t *txn) discard() {
+	e := t.txn.Rollback()
+	if e != nil {
+		log.Error("discard error:", e)
+	}
 
 }
