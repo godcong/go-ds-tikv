@@ -91,11 +91,23 @@ func (t *txn) Delete(key ds.Key) error {
 }
 
 func (t *txn) Commit() error {
-	panic("implement me")
+	t.ds.closeLk.RLock()
+	defer t.ds.closeLk.RUnlock()
+	if t.ds.closed {
+		return ErrClosed
+	}
+
+	return t.commit()
 }
 
 func (t *txn) Discard() {
-	panic("implement me")
+	t.ds.closeLk.RLock()
+	defer t.ds.closeLk.RUnlock()
+	if t.ds.closed {
+		return
+	}
+
+	t.discard()
 }
 
 // Options are the badger datastore options, reexported here for convenience.
@@ -515,6 +527,10 @@ func (t *txn) getSize(key ds.Key) (int, error) {
 }
 func (t *txn) delete(key ds.Key) error {
 	return t.txn.Delete(key.Bytes())
+}
+
+func (t *txn) discard() {
+	t.txn.Rollback()
 }
 
 // filter returns _true_ if we should filter (skip) the entry
