@@ -40,27 +40,54 @@ type txn struct {
 }
 
 func (t *txn) Get(key ds.Key) (value []byte, err error) {
+	t.ds.closeLk.RLock()
+	defer t.ds.closeLk.RUnlock()
+	if t.ds.closed {
+		return nil, ErrClosed
+	}
 	return t.get(key)
 }
 
 func (t *txn) Has(key ds.Key) (exists bool, err error) {
-	panic("implement me")
+	t.ds.closeLk.RLock()
+	defer t.ds.closeLk.RUnlock()
+	if t.ds.closed {
+		return false, ErrClosed
+	}
+	return t.has(key)
 }
 
 func (t *txn) GetSize(key ds.Key) (size int, err error) {
-	panic("implement me")
+	t.ds.closeLk.RLock()
+	defer t.ds.closeLk.RUnlock()
+	if t.ds.closed {
+		return -1, ErrClosed
+	}
+
+	return t.getSize(key)
 }
 
 func (t *txn) Query(q dsq.Query) (dsq.Results, error) {
-	panic("implement me")
+	t.ds.closeLk.RLock()
+	defer t.ds.closeLk.RUnlock()
+	if t.ds.closed {
+		return nil, ErrClosed
+	}
+	return t.query(q)
 }
 
 func (t *txn) Put(key ds.Key, value []byte) error {
-	panic("implement me")
+	return t.put(key, value)
 }
 
 func (t *txn) Delete(key ds.Key) error {
-	panic("implement me")
+	t.ds.closeLk.RLock()
+	defer t.ds.closeLk.RUnlock()
+	if t.ds.closed {
+		return ErrClosed
+	}
+
+	return t.delete(key)
 }
 
 func (t *txn) Commit() error {
@@ -427,6 +454,20 @@ func (t *txn) has(key ds.Key) (bool, error) {
 	default:
 		return false, err
 	}
+}
+func (t *txn) getSize(key ds.Key) (int, error) {
+	val, err := t.txn.Get(context.TODO(), key.Bytes())
+	switch err {
+	case nil:
+		return len(val), nil
+	case kv.ErrNotExist:
+		return -1, ds.ErrNotFound
+	default:
+		return -1, err
+	}
+}
+func (t *txn) delete(key ds.Key) error {
+	return t.txn.Delete(key.Bytes())
 }
 
 // filter returns _true_ if we should filter (skip) the entry
