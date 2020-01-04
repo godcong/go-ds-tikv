@@ -4,8 +4,9 @@ import (
 	"context"
 	"errors"
 	ds "github.com/ipfs/go-datastore"
-	"github.com/ipfs/go-datastore/query"
+	dsq "github.com/ipfs/go-datastore/query"
 	logger "github.com/ipfs/go-log"
+	"github.com/jbenet/goprocess"
 	"github.com/tikv/client-go/config"
 	"github.com/tikv/client-go/txnkv"
 	"github.com/tikv/client-go/txnkv/kv"
@@ -50,7 +51,7 @@ func (t *txn) GetSize(key ds.Key) (size int, err error) {
 	panic("implement me")
 }
 
-func (t *txn) Query(q query.Query) (query.Results, error) {
+func (t *txn) Query(q dsq.Query) (dsq.Results, error) {
 	panic("implement me")
 }
 
@@ -81,7 +82,7 @@ var _ ds.Datastore = (*Datastore)(nil)
 var _ ds.TxnDatastore = (*Datastore)(nil)
 
 //var _ ds.TTLDatastore = (*Datastore)(nil)
-var _ ds.GCDatastore = (*Datastore)(nil)
+//var _ ds.GCDatastore = (*Datastore)(nil)
 
 var log = logger.Logger("tikv")
 
@@ -128,18 +129,36 @@ func (d *Datastore) NewTransaction(readOnly bool) (ds.Txn, error) {
 }
 
 func (d *Datastore) Get(key ds.Key) (value []byte, err error) {
-	panic("ds.Datastore")
+	d.closeLk.RLock()
+	defer d.closeLk.RUnlock()
+	if d.closed {
+		return nil, ErrClosed
+	}
+
+	txn := d.newImplicitTransaction(true)
+	defer txn.rollback()
+
+	return txn.get(key)
 }
 
 func (d *Datastore) Has(key ds.Key) (exists bool, err error) {
-	panic("ds.Datastore")
+	d.closeLk.RLock()
+	defer d.closeLk.RUnlock()
+	if d.closed {
+		return false, ErrClosed
+	}
+
+	txn := d.newImplicitTransaction(true)
+	defer txn.rollback()
+
+	return txn.has(key)
 }
 
 func (d *Datastore) GetSize(key ds.Key) (size int, err error) {
 	panic("ds.Datastore")
 }
 
-func (d *Datastore) Query(q query.Query) (query.Results, error) {
+func (d *Datastore) Query(q dsq.Query) (dsq.Results, error) {
 	txn := d.newImplicitTransaction(true)
 
 	return txn.query(q)
@@ -213,6 +232,213 @@ func (t *txn) get(key ds.Key) ([]byte, error) {
 	return item, nil
 }
 
-func (t *txn) query(q query.Query) (query.Results, error) {
-	panic("TODO")
+func (t *txn) iter(prefix []byte, reverse bool) (it kv.Iterator, e error) {
+	if reverse {
+		return t.txn.IterReverse(context.Background(), prefix)
+	}
+	return t.txn.Iter(context.Background(), prefix, nil)
 }
+
+func (t *txn) query(q dsq.Query) (dsq.Results, error) {
+
+	//prefetchValues := !q.KeysOnly
+	prefix := []byte(q.Prefix)
+	reverse := false
+	var e error
+	// Handle ordering
+	if len(q.Orders) > 0 {
+		switch q.Orders[0].(type) {
+		case dsq.OrderByKey, *dsq.OrderByKey:
+		// We order by key by default.
+		case dsq.OrderByKeyDescending, *dsq.OrderByKeyDescending:
+			// Reverse order by key
+			reverse = true
+		default:
+
+			// Ok, we have a weird order we can't handle. Let's
+			// perform the _base_ query (prefix, filter, etc.), then
+			// handle sort/offset/limit later.
+
+			// Skip the stuff we can't apply.
+			baseQuery := q
+			baseQuery.Limit = 0
+			baseQuery.Offset = 0
+			baseQuery.Orders = nil
+
+			// perform the base query.
+			res, err := t.query(baseQuery)
+			if err != nil {
+				return nil, err
+			}
+
+			// fix the query
+			res = dsq.ResultsReplaceQuery(res, q)
+
+			// Remove the parts we've already applied.
+			naiveQuery := q
+			naiveQuery.Prefix = ""
+			naiveQuery.Filters = nil
+
+			// Apply the rest of the query
+			return dsq.NaiveQueryApply(naiveQuery, res), nil
+		}
+	}
+	it, e := t.iter(prefix, reverse)
+	if e != nil {
+		return nil, e
+	}
+	//it := t.txn.Iter(context.Background(), opt)
+	qrb := dsq.NewResultBuilder(q)
+	qrb.Process.Go(func(worker goprocess.Process) {
+		t.ds.closeLk.RLock()
+		closedEarly := false
+		defer func() {
+			t.ds.closeLk.RUnlock()
+			if closedEarly {
+				select {
+				case qrb.Output <- dsq.Result{
+					Error: ErrClosed,
+				}:
+				case <-qrb.Process.Closing():
+				}
+			}
+
+		}()
+		if t.ds.closed {
+			closedEarly = true
+			return
+		}
+
+		// this iterator is part of an implicit transaction, so when
+		// we're done we must discard the transaction. It's safe to
+		// discard the txn it because it contains the iterator only.
+		if t.implicit {
+			defer t.rollback()
+		}
+
+		defer it.Close()
+
+		// All iterators must be started by rewinding.
+		//it.Rewind()
+
+		// skip to the offset
+		for skipped := 0; skipped < q.Offset && it.Valid(); it.Next(context.TODO()) {
+			// On the happy path, we have no filters and we can go
+			// on our way.
+			if len(q.Filters) == 0 {
+				skipped++
+				continue
+			}
+
+			// On the sad path, we need to apply filters before
+			// counting the item as "skipped" as the offset comes
+			// _after_ the filter.
+			//item := it.Value()
+
+			//matches := true
+			//check := func(value []byte) error {
+			//	e := dsq.Entry{
+			//		Key:   string(it.Key()),
+			//		Value: value,
+			//		Size:  len(value), // this function is basically free
+			//	}
+
+			// Only calculate expirations if we need them.
+			//if q.ReturnExpirations {
+			//	e.Expiration = expires(item)
+			//}
+			//matches = filter(q.Filters, e)
+			//return nil
+			//}
+
+			// Maybe check with the value, only if we need it.
+			//var err error
+			//if q.KeysOnly {
+			//	err = check(nil)
+			//} else {
+			//	err = item.Value(check)
+			//}
+
+			//if err != nil {
+			//	select {
+			//	case qrb.Output <- dsq.Result{Error: err}:
+			//	case <-t.ds.closing: // datastore closing.
+			//		closedEarly = true
+			//		return
+			//	case <-worker.Closing(): // client told us to close early
+			//		return
+			//	}
+			//}
+			//if !matches {
+			//	skipped++
+			//}
+		}
+
+		for sent := 0; (q.Limit <= 0 || sent < q.Limit) && it.Valid(); it.Next(context.TODO()) {
+			val := it.Value()
+			e := dsq.Entry{Key: string(it.Key())}
+
+			// Maybe get the value
+			var result dsq.Result
+			if !q.KeysOnly {
+				var b []byte
+				copy(b, val)
+				e.Value = b
+				e.Size = len(b)
+				result = dsq.Result{Entry: e}
+			} else {
+				e.Size = len(it.Value())
+				result = dsq.Result{Entry: e}
+			}
+
+			//if q.ReturnExpirations {
+			//	result.Expiration = expires(item)
+			//}
+
+			// Finally, filter it (unless we're dealing with an error).
+			if result.Error == nil && filter(q.Filters, e) {
+				continue
+			}
+
+			select {
+			case qrb.Output <- result:
+				sent++
+			case <-t.ds.closing: // datastore closing.
+				closedEarly = true
+				return
+			case <-worker.Closing(): // client told us to close early
+				return
+			}
+		}
+	})
+
+	go qrb.Process.CloseAfterChildren() //nolint
+
+	return qrb.Results(), nil
+}
+
+func (t *txn) has(key ds.Key) (bool, error) {
+	_, err := t.txn.Get(context.TODO(), key.Bytes())
+	switch err {
+	case kv.ErrNotExist:
+		return false, nil
+	case nil:
+		return true, nil
+	default:
+		return false, err
+	}
+}
+
+// filter returns _true_ if we should filter (skip) the entry
+func filter(filters []dsq.Filter, entry dsq.Entry) bool {
+	for _, f := range filters {
+		if !f.Filter(entry) {
+			return true
+		}
+	}
+	return false
+}
+
+//func expires(item *badger.Item) time.Time {
+//	return time.Unix(int64(item.ExpiresAt()), 0)
+//}
