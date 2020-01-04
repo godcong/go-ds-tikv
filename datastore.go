@@ -296,10 +296,10 @@ func (t *txn) commit() error {
 }
 
 func (t *txn) rollback() {
-	e := t.txn.Rollback()
-	if e != nil {
-		log.Error("discard error:", e)
-	}
+	_ = t.txn.Rollback()
+	//if e != nil {
+	//log.Error("discard error:", e)
+	//}
 }
 
 func (t *txn) putWithTTL(key ds.Key, bytes []byte, duration time.Duration) error {

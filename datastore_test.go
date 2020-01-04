@@ -22,7 +22,7 @@ var testcases = map[string]string{
 	"/a/d":   "ad",
 	"/e":     "e",
 	"/f":     "f",
-	"/g":     "",
+	"/g":     " ",
 }
 
 // returns datastore, and a function to call on exit.
