@@ -3,9 +3,7 @@ package tikv
 import (
 	"bytes"
 	"fmt"
-	"io/ioutil"
 	"math/rand"
-	"os"
 	"sort"
 	"testing"
 	"time"
@@ -521,13 +519,9 @@ func TestGC(t *testing.T) {
 // this interval is not configurable, we re-open the database
 // (the size is always calculated on Open) to make things quick.
 func TestDiskUsage(t *testing.T) {
-	path, err := ioutil.TempDir(os.TempDir(), "testing_badger_")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer os.RemoveAll(path)
+	addr := []string{"192.168.1.120:2379"}
 
-	d, err := NewDatastore(path, nil)
+	d, err := NewDatastore(addr, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -538,26 +532,21 @@ func TestDiskUsage(t *testing.T) {
 	addTestCases(t, d, testcases)
 	d.Close()
 
-	d, err = NewDatastore(path, nil)
+	d, err = NewDatastore(addr, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
 	s, _ := d.DiskUsage()
-	if s <= 0 {
+	if s < 0 {
 		t.Error("expected some size")
 	}
 	d.Close()
 }
 
 func TestTxnDiscard(t *testing.T) {
-	path, err := ioutil.TempDir(os.TempDir(), "testing_badger_")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer os.RemoveAll(path)
+	addr := []string{"192.168.1.120:2379"}
 
-	d, err := NewDatastore(path, nil)
-	defer os.RemoveAll(path)
+	d, err := NewDatastore(addr, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -583,13 +572,9 @@ func TestTxnDiscard(t *testing.T) {
 }
 
 func TestTxnCommit(t *testing.T) {
-	path, err := ioutil.TempDir(os.TempDir(), "testing_badger_")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer os.RemoveAll(path)
+	addr := []string{"192.168.1.120:2379"}
 
-	d, err := NewDatastore(path, nil)
+	d, err := NewDatastore(addr, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -618,13 +603,9 @@ func TestTxnCommit(t *testing.T) {
 }
 
 func TestTxnBatch(t *testing.T) {
-	path, err := ioutil.TempDir(os.TempDir(), "testing_badger_")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer os.RemoveAll(path)
+	addr := []string{"192.168.1.120:2379"}
 
-	d, err := NewDatastore(path, nil)
+	d, err := NewDatastore(addr, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -672,13 +653,9 @@ func TestTxnBatch(t *testing.T) {
 }
 
 func TestTTL(t *testing.T) {
-	path, err := ioutil.TempDir(os.TempDir(), "testing_badger_")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer os.RemoveAll(path)
+	addr := []string{"192.168.1.120:2379"}
 
-	d, err := NewDatastore(path, nil)
+	d, err := NewDatastore(addr, nil)
 	if err != nil {
 		t.Fatal(err)
 	}

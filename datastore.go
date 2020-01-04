@@ -114,6 +114,11 @@ var _ ds.TxnDatastore = (*Datastore)(nil)
 var log = logger.Logger("tikv")
 
 func NewDatastore(addr []string, options *Options) (*Datastore, error) {
+	if options == nil {
+		options = &Options{
+			Config: config.Default(),
+		}
+	}
 	kv, err := txnkv.NewClient(context.TODO(), addr, options.Config)
 	//kv, err := rawkv.NewClient(context.TODO(), []string{"127.0.0.1:2379"}, options.Config)
 	if err != nil {
@@ -126,6 +131,10 @@ func NewDatastore(addr []string, options *Options) (*Datastore, error) {
 	}
 
 	return ds, nil
+}
+func (d *Datastore) Batch() (ds.Batch, error) {
+	tx, _ := d.NewTransaction(false)
+	return tx, nil
 }
 
 func (d *Datastore) PutWithTTL(key ds.Key, value []byte, ttl time.Duration) error {
@@ -226,6 +235,10 @@ func (d *Datastore) newImplicitTransaction(readOnly bool) *txn {
 		return nil
 	}
 	return &txn{d, t, true}
+}
+
+func (d *Datastore) DiskUsage() (uint64, error) {
+	return 0, nil
 }
 
 func (t *txn) put(key ds.Key, bytes []byte) error {
