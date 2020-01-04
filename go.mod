@@ -8,6 +8,7 @@ require (
 	github.com/grpc-ecosystem/go-grpc-middleware v1.1.0 // indirect
 	github.com/ipfs/go-datastore v0.3.1
 	github.com/ipfs/go-log v1.0.0
+	github.com/jbenet/goprocess v0.0.0-20160826012719-b497e2f366b8
 	github.com/pingcap/check v0.0.0-20191216031241-8a5a85928f12 // indirect
 	github.com/pingcap/goleveldb v0.0.0-20191031114657-7683883cfb36 // indirect
 	github.com/pingcap/kvproto v0.0.0-20191217072959-393e6c0fd4b7 // indirect
