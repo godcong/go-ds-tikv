@@ -303,7 +303,7 @@ func (d *Datastore) Close() error {
 }
 
 func (d *Datastore) CollectGarbage() error {
-	return nil
+	return errors.New("not supported")
 }
 
 // newImplicitTransaction creates a transaction marked as 'implicit'.
@@ -556,15 +556,15 @@ func (t *txn) delete(key ds.Key) error {
 }
 
 func (t *txn) setTTL(key ds.Key, duration time.Duration) error {
-	panic("not supported")
+	return errors.New("not supported")
 }
 
 func (t *txn) getExpiration(key ds.Key) (time.Time, error) {
-	panic("not supported")
+	return time.Time{}, errors.New("not supported")
 }
 
 func (t *txn) putWithTTL(key ds.Key, bytes []byte, duration time.Duration) error {
-	panic("not supported")
+	return errors.New("not supported")
 }
 
 // filter returns _true_ if we should filter (skip) the entry
