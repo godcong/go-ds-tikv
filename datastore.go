@@ -421,43 +421,43 @@ func (t *txn) query(q dsq.Query) (dsq.Results, error) {
 			// _after_ the filter.
 			//item := it.Value()
 
-			//matches := true
-			//check := func(value []byte) error {
-			//	e := dsq.Entry{
-			//		Key:   string(it.Key()),
-			//		Value: value,
-			//		Size:  len(value), // this function is basically free
-			//	}
+			matches := true
+			check := func(value []byte) error {
+				e := dsq.Entry{
+					Key:   string(it.Key()),
+					Value: value,
+					Size:  len(value), // this function is basically free
+				}
 
-			// Only calculate expirations if we need them.
-			//if q.ReturnExpirations {
-			//	e.Expiration = expires(item)
-			//}
-			//matches = filter(q.Filters, e)
-			//return nil
-			//}
+				// Only calculate expirations if we need them.
+				//if q.ReturnExpirations {
+				//	e.Expiration = expires(item)
+				//}
+				matches = filter(q.Filters, e)
+				return nil
+			}
 
 			// Maybe check with the value, only if we need it.
-			//var err error
-			//if q.KeysOnly {
-			//	err = check(nil)
-			//} else {
-			//	err = item.Value(check)
-			//}
+			var err error
+			if q.KeysOnly {
+				err = check(nil)
+			} else {
+				err = nil
+			}
 
-			//if err != nil {
-			//	select {
-			//	case qrb.Output <- dsq.Result{Error: err}:
-			//	case <-t.ds.closing: // datastore closing.
-			//		closedEarly = true
-			//		return
-			//	case <-worker.Closing(): // client told us to close early
-			//		return
-			//	}
-			//}
-			//if !matches {
-			//	skipped++
-			//}
+			if err != nil {
+				select {
+				case qrb.Output <- dsq.Result{Error: err}:
+				case <-t.ds.closing: // datastore closing.
+					closedEarly = true
+					return
+				case <-worker.Closing(): // client told us to close early
+					return
+				}
+			}
+			if !matches {
+				skipped++
+			}
 		}
 
 		for sent := 0; (q.Limit <= 0 || sent < q.Limit) && it.Valid(); it.Next(context.TODO()) {
@@ -467,10 +467,8 @@ func (t *txn) query(q dsq.Query) (dsq.Results, error) {
 			// Maybe get the value
 			var result dsq.Result
 			if !q.KeysOnly {
-				var b []byte
-				copy(b, val)
-				e.Value = b
-				e.Size = len(b)
+				e.Value = append(e.Value, val...)
+				e.Size = len(e.Value)
 				result = dsq.Result{Entry: e}
 			} else {
 				e.Size = len(it.Value())
