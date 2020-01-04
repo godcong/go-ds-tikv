@@ -191,12 +191,26 @@ func (d *Datastore) Has(key ds.Key) (exists bool, err error) {
 }
 
 func (d *Datastore) GetSize(key ds.Key) (size int, err error) {
-	panic("ds.Datastore")
+	d.closeLk.RLock()
+	defer d.closeLk.RUnlock()
+	if d.closed {
+		return -1, ErrClosed
+	}
+
+	txn := d.newImplicitTransaction(true)
+	defer txn.rollback()
+
+	return txn.getSize(key)
 }
 
 func (d *Datastore) Query(q dsq.Query) (dsq.Results, error) {
-	txn := d.newImplicitTransaction(true)
+	d.closeLk.RLock()
+	defer d.closeLk.RUnlock()
 
+	txn := d.newImplicitTransaction(true)
+	// We cannot defer txn.Discard() here, as the txn must remain active while the iterator is open.
+	// https://github.com/dgraph-io/badger/commit/b1ad1e93e483bbfef123793ceedc9a7e34b09f79
+	// The closing logic in the query goprocess takes care of discarding the implicit transaction.
 	return txn.query(q)
 }
 
@@ -212,7 +226,18 @@ func (d *Datastore) Put(key ds.Key, value []byte) error {
 }
 
 func (d *Datastore) Delete(key ds.Key) error {
-	panic("ds.Datastore")
+	d.closeLk.RLock()
+	defer d.closeLk.RUnlock()
+
+	txn := d.newImplicitTransaction(false)
+	defer txn.rollback()
+
+	err := txn.delete(key)
+	if err != nil {
+		return err
+	}
+
+	return txn.commit()
 }
 
 func (d *Datastore) Sync(prefix ds.Key) error {
@@ -220,11 +245,20 @@ func (d *Datastore) Sync(prefix ds.Key) error {
 }
 
 func (d *Datastore) Close() error {
-	return nil
+	d.closeOnce.Do(func() {
+		close(d.closing)
+	})
+	d.closeLk.Lock()
+	defer d.closeLk.Unlock()
+	if d.closed {
+		return ErrClosed
+	}
+	d.closed = true
+	return d.cli.Close()
 }
 
 func (d *Datastore) CollectGarbage() error {
-	panic("ds.Datastore")
+	return nil
 }
 
 // newImplicitTransaction creates a transaction marked as 'implicit'.
