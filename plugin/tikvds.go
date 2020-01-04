@@ -17,7 +17,7 @@ var Plugins = []plugin.Plugin{
 type TiKVPlugin struct{}
 
 func (t TiKVPlugin) Name() string {
-	return "s3-datastore-plugin"
+	return "tikv-datastore-plugin"
 }
 
 func (t TiKVPlugin) Version() string {
@@ -29,7 +29,7 @@ func (t TiKVPlugin) Init() error {
 }
 
 func (t TiKVPlugin) DatastoreTypeName() string {
-	return "s3ds"
+	return "tikvds"
 }
 
 func (t TiKVPlugin) DatastoreConfigParser() fsrepo.ConfigFromMap {
@@ -40,11 +40,11 @@ func (t TiKVPlugin) DatastoreConfigParser() fsrepo.ConfigFromMap {
 			workers = int(workersf)
 			switch {
 			case !ok:
-				return nil, fmt.Errorf("s3ds: workers not a number")
+				return nil, fmt.Errorf("tikvds: workers not a number")
 			case workers <= 0:
-				return nil, fmt.Errorf("s3ds: workers <= 0: %f", workersf)
+				return nil, fmt.Errorf("tikvds: workers <= 0: %f", workersf)
 			case float64(workers) != workersf:
-				return nil, fmt.Errorf("s3ds: workers is not an integer: %f", workersf)
+				return nil, fmt.Errorf("tikvds: workers is not an integer: %f", workersf)
 			}
 		}
 
