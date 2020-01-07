@@ -468,7 +468,7 @@ func (t *txn) query(q dsq.Query) (dsq.Results, error) {
 			if q.KeysOnly {
 				err = check(nil)
 			} else {
-				err = nil
+				err = check(it.Value())
 			}
 
 			if err != nil {
